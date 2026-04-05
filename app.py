@@ -632,12 +632,9 @@ TOOL_LABELS = {
 def build_system_prompt() -> str:
     now_ar = _now_ar()
     today_str = now_ar.strftime("%Y-%m-%d")
-    weekday = now_ar.strftime("%A")           # Monday, Tuesday, etc.
-    weekday_es = {
-        "Monday": "lunes", "Tuesday": "martes", "Wednesday": "miércoles",
-        "Thursday": "jueves", "Friday": "viernes",
-        "Saturday": "sábado", "Sunday": "domingo",
-    }.get(weekday, weekday)
+    # weekday() → 0=lunes … 6=domingo, independiente del locale del servidor
+    _DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    weekday_es = _DIAS[now_ar.weekday()]
 
     return f"""Sos un asistente experto en fútbol y estadísticas deportivas. Usás la API de SofaScore.
 
