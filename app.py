@@ -2,7 +2,10 @@ import streamlit as st
 import anthropic
 import json
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+# Argentina = UTC-3, sin horario de verano
+AR_TZ = timezone(timedelta(hours=-3))
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -107,13 +110,22 @@ def _ss(path: str) -> dict:
     return r.json()
 
 def _fmt_dt(ts) -> str | None:
-    return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M UTC") if ts else None
+    """Timestamp → fecha y hora Argentina (UTC-3)."""
+    if not ts:
+        return None
+    return datetime.fromtimestamp(ts, tz=AR_TZ).strftime("%Y-%m-%d %H:%M (AR)")
 
 def _fmt_date(ts) -> str | None:
-    return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d") if ts else None
+    """Timestamp → fecha en Argentina."""
+    if not ts:
+        return None
+    return datetime.fromtimestamp(ts, tz=AR_TZ).strftime("%Y-%m-%d")
 
-def _today_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+def _now_ar() -> datetime:
+    return datetime.now(AR_TZ)
+
+def _today_ar() -> str:
+    return _now_ar().strftime("%Y-%m-%d")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -125,7 +137,7 @@ def ss_live(sport: str = "football") -> dict:
     try:
         evs = _ss(f"/sport/{sport}/events/live").get("events", [])[:25]
         return {
-            "fetched_at_utc": _today_utc(),
+            "fetched_at_ar": _today_ar(),
             "count": len(evs),
             "live": [{
                 "id": e.get("id"),
@@ -162,7 +174,7 @@ def ss_team_recent(team_id: str) -> dict:
     try:
         evs = _ss(f"/team/{team_id}/events/last/0").get("events", [])[-10:]
         return {
-            "today_utc": _today_utc(),
+            "today_ar": _today_ar(),
             "matches": [{
                 "id": e.get("id"),
                 "home": e.get("homeTeam", {}).get("name"),
@@ -179,17 +191,17 @@ def ss_team_recent(team_id: str) -> dict:
 
 
 def ss_team_next(team_id: str) -> dict:
-    """Próximos partidos programados de un equipo. Incluye fecha y hora en UTC."""
+    """Próximos partidos programados de un equipo. Incluye fecha y hora en hora Argentina."""
     try:
         evs = _ss(f"/team/{team_id}/events/next/0").get("events", [])[:7]
         return {
-            "today_utc": _today_utc(),
+            "today_ar": _today_ar(),
             "next_matches": [{
                 "id": e.get("id"),
                 "home": e.get("homeTeam", {}).get("name"),
                 "away": e.get("awayTeam", {}).get("name"),
                 "tournament": e.get("tournament", {}).get("name"),
-                "datetime_utc": _fmt_dt(e.get("startTimestamp")),
+                "datetime_ar": _fmt_dt(e.get("startTimestamp")),
                 "date": _fmt_date(e.get("startTimestamp")),
             } for e in evs],
         }
@@ -209,7 +221,7 @@ def ss_match_data(match_id: str) -> dict:
             "status": ev.get("status", {}).get("description"),
             "tournament": ev.get("tournament", {}).get("name"),
             "country": ev.get("tournament", {}).get("category", {}).get("name"),
-            "datetime_utc": _fmt_dt(ev.get("startTimestamp")),
+            "datetime_ar": _fmt_dt(ev.get("startTimestamp")),
             "venue": ev.get("venue", {}).get("name") if ev.get("venue") else None,
         }
     except Exception as ex:
@@ -349,7 +361,7 @@ def ss_standings(tournament_id: str, season_id: str) -> dict:
         rows = (_ss(f"/unique-tournament/{tournament_id}/season/{season_id}/standings/total")
                 .get("standings", [{}])[0].get("rows", []))
         return {
-            "today_utc": _today_utc(),
+            "today_ar": _today_ar(),
             "standings": [{
                 "pos": r.get("position"),
                 "team": r.get("team", {}).get("name"),
@@ -410,7 +422,7 @@ def ss_matches_by_date(date_str: str, sport: str = "football") -> dict:
         evs = _ss(f"/sport/{sport}/scheduled-events/{date_str}").get("events", [])
         return {
             "date_requested": date_str,
-            "today_utc": _today_utc(),
+            "today_ar": _today_ar(),
             "total": len(evs),
             "matches": [{
                 "id": e.get("id"),
@@ -421,7 +433,7 @@ def ss_matches_by_date(date_str: str, sport: str = "football") -> dict:
                 "status": e.get("status", {}).get("description"),
                 "tournament": e.get("tournament", {}).get("name"),
                 "country": e.get("tournament", {}).get("category", {}).get("name"),
-                "time_utc": _fmt_dt(e.get("startTimestamp")),
+                "time_ar": _fmt_dt(e.get("startTimestamp")),
             } for e in evs[:60]],
         }
     except Exception as ex:
@@ -448,7 +460,7 @@ TOOLS = [
         "description": (
             "Partidos programados en una fecha específica. "
             "Usá esta tool para 'partidos de hoy', 'partidos de mañana', 'partidos del sábado', etc. "
-            "Calculá la fecha correcta usando today_utc que ya conocés. "
+            "Calculá la fecha correcta usando today_ar que ya conocés. "
             "date_str formato: YYYY-MM-DD."
         ),
         "input_schema": {
@@ -481,8 +493,8 @@ TOOLS = [
     {
         "name": "ss_team_next",
         "description": (
-            "Próximos partidos programados de un equipo con fecha y hora en UTC. "
-            "Siempre mostrá cuántos días faltan desde hoy (today_utc que ya conocés) hasta cada partido."
+            "Próximos partidos programados de un equipo con fecha y hora en Argentina. "
+            "Siempre mostrá cuántos días faltan desde hoy (today_ar que ya conocés) hasta cada partido."
         ),
         "input_schema": {
             "type": "object",
@@ -618,9 +630,9 @@ TOOL_LABELS = {
 # AGENTIC LOOP
 # ══════════════════════════════════════════════════════════════════════════════
 def build_system_prompt() -> str:
-    now_utc = datetime.now(timezone.utc)
-    today_str = now_utc.strftime("%Y-%m-%d")
-    weekday = now_utc.strftime("%A")           # Monday, Tuesday, etc.
+    now_ar = _now_ar()
+    today_str = now_ar.strftime("%Y-%m-%d")
+    weekday = now_ar.strftime("%A")           # Monday, Tuesday, etc.
     weekday_es = {
         "Monday": "lunes", "Tuesday": "martes", "Wednesday": "miércoles",
         "Thursday": "jueves", "Friday": "viernes",
@@ -630,7 +642,7 @@ def build_system_prompt() -> str:
     return f"""Sos un asistente experto en fútbol y estadísticas deportivas. Usás la API de SofaScore.
 
 ## 📅 FECHA DE HOY
-Hoy es **{weekday_es} {today_str} (UTC)**. Usá esta fecha siempre que el usuario mencione "hoy", "mañana", "esta semana", "el fin de semana", "próximos partidos", etc.
+Hoy es **{weekday_es} {today_str} (hora Argentina, UTC-3)**. Usá esta fecha siempre que el usuario mencione "hoy", "mañana", "esta semana", "el fin de semana", "próximos partidos", etc.
 
 Ejemplos de cálculo:
 - "hoy" → {today_str}
@@ -661,7 +673,7 @@ Cuando el usuario pregunta por próximos partidos de un equipo (ss_team_next), *
 ## 📝 Formato de respuesta
 - Respondé **siempre en español**, tono amigable y claro
 - Usá **tablas markdown** para datos tabulares (tabla de posiciones, estadísticas, alineaciones)
-- Para próximos partidos, mostrá: fecha, hora UTC, cuántos días faltan y el torneo
+- Para próximos partidos, mostrá: fecha, hora Argentina, cuántos días faltan y el torneo
 - Si una tool falla con error, explicá el motivo brevemente y sugerí alternativas
 - Si el usuario necesita un ID que no tiene, explicale cómo encontrarlo en la URL"""
 
@@ -792,11 +804,11 @@ with c1:
         unsafe_allow_html=True,
     )
 with c2:
-    now = datetime.now(timezone.utc)
+    now = _now_ar()
     st.markdown(
         f"<div style='text-align:right;margin-top:18px;color:#57606a;font-size:.85rem'>"
         f"📅 Hoy: <b>{now.strftime('%Y-%m-%d')}</b><br>"
-        f"🕐 {now.strftime('%H:%M')} UTC</div>",
+        f"🕐 {now.strftime('%H:%M')} AR</div>",
         unsafe_allow_html=True,
     )
 st.divider()
